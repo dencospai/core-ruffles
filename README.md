@@ -73,4 +73,3 @@ Rust, Java e as ferramentas de compilação não são necessários para usar o c
 
 Os diretórios podem variar entre instalações nativas e Flatpak; use os caminhos
 indicados pelo próprio RetroArch.
->>>>>>> principal

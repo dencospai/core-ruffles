@@ -20,7 +20,7 @@ try {
     $destination = 'dist/windows-x64'
     New-Item -ItemType Directory -Force $destination | Out-Null
     Copy-Item "target/$target/$profile/ruffle_libretro.dll" $destination
-    Copy-Item 'ruffle_libretro.info', 'README.md', 'VALIDATION.md', 'THIRD_PARTY.md', 'LICENSE-MIT', 'LICENSE-APACHE' $destination
+    Copy-Item 'ruffle_libretro.info', 'README.md', 'LICENSE-MIT', 'LICENSE-APACHE' $destination
     Write-Host "Core built: $destination/ruffle_libretro.dll"
 } finally {
     Pop-Location

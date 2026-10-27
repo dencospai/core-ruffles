@@ -184,7 +184,12 @@ pub extern "C" fn retro_init() {
                     description: description.as_ptr().cast(),
                 })
                 .collect();
-            for (id, label) in [(10, c"Left mouse button"), (11, c"Right mouse button")] {
+            for (id, label) in [
+                (10, c"Left mouse button (gamepad mouse on)"),
+                (11, c"Right mouse button (gamepad mouse on)"),
+                (14, c"Mouse click (if L3 selected in core options)"),
+                (15, c"Mouse click (if R3 selected in core options)"),
+            ] {
                 descriptors.push(ffi::InputDescriptor {
                     port: 0,
                     device: ffi::JOYPAD,
@@ -220,7 +225,7 @@ pub unsafe extern "C" fn retro_get_system_info(info: *mut ffi::SystemInfo) {
     if !info.is_null() {
         info.write(ffi::SystemInfo {
             library_name: c"Ruffle".as_ptr(),
-            library_version: c"0.2.2".as_ptr(),
+            library_version: c"0.2.3".as_ptr(),
             valid_extensions: c"swf".as_ptr(),
             need_fullpath: true,
             block_extract: false,
@@ -322,8 +327,14 @@ pub extern "C" fn retro_run() {
             }
         }
         let text = std::mem::take(&mut *TEXT.lock().unwrap_or_else(|e| e.into_inner()));
-        let joypad = STATE.with(|state| state.borrow().joypad);
-        let snapshot = input::poll(callbacks.input_state, joypad, text);
+        let (joypad, mouse) = STATE.with(|state| {
+            let state = state.borrow();
+            let options = updated_options
+                .or_else(|| state.game.as_ref().map(Game::options))
+                .unwrap_or_default();
+            (state.joypad, options.gamepad_mouse)
+        });
+        let snapshot = input::poll(callbacks.input_state, joypad, mouse, text);
         let frame = STATE.with(|state| {
             let mut state = state.borrow_mut();
             state

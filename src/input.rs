@@ -1,4 +1,5 @@
 use crate::ffi;
+use crate::options::GamepadMouse;
 use ruffle_core::events::{
     KeyDescriptor, KeyLocation, LogicalKey, MouseButton, MouseWheelDelta, NamedKey, PhysicalKey,
     PlayerEvent,
@@ -48,7 +49,12 @@ fn stick_delta(value: i16) -> f64 {
     }
 }
 
-pub fn poll(callback: Option<ffi::InputState>, joypad: bool, text: Vec<char>) -> Snapshot {
+pub fn poll(
+    callback: Option<ffi::InputState>,
+    joypad: bool,
+    mouse: GamepadMouse,
+    text: Vec<char>,
+) -> Snapshot {
     let mut result = Snapshot {
         text,
         ..Snapshot::default()
@@ -77,10 +83,14 @@ pub fn poll(callback: Option<ffi::InputState>, joypad: bool, text: Vec<char>) ->
         for (button, key, _) in PAD_KEYS {
             result.keys[key] |= read(ffi::JOYPAD, 0, button) != 0;
         }
-        result.buttons[0] |= read(ffi::JOYPAD, 0, 10) != 0;
-        result.buttons[1] |= read(ffi::JOYPAD, 0, 11) != 0;
-        result.mouse_delta[0] += stick_delta(read(ffi::ANALOG, 1, 0));
-        result.mouse_delta[1] += stick_delta(read(ffi::ANALOG, 1, 1));
+        if mouse.enabled {
+            // Keep the existing shoulder-button shortcuts while mouse mode is on.
+            result.buttons[0] |=
+                read(ffi::JOYPAD, 0, mouse.click.button()) != 0 || read(ffi::JOYPAD, 0, 10) != 0;
+            result.buttons[1] |= read(ffi::JOYPAD, 0, 11) != 0;
+            result.mouse_delta[0] += stick_delta(read(ffi::ANALOG, mouse.stick.index(), 0));
+            result.mouse_delta[1] += stick_delta(read(ffi::ANALOG, mouse.stick.index(), 1));
+        }
     }
     result
 }
@@ -267,6 +277,127 @@ pub fn key_descriptor(id: u32) -> Option<KeyDescriptor> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::options::{MouseClick, MouseStick};
+    use std::cell::RefCell;
+
+    thread_local! {
+        static READINGS: RefCell<Vec<(u32, u32, u32, i16)>> = const { RefCell::new(Vec::new()) };
+    }
+
+    unsafe extern "C" fn controller(port: u32, device: u32, index: u32, id: u32) -> i16 {
+        if port != 0 {
+            return 0;
+        }
+        READINGS.with(|readings| {
+            readings
+                .borrow()
+                .iter()
+                .find(|r| (r.0, r.1, r.2) == (device, index, id))
+                .map_or(0, |r| r.3)
+        })
+    }
+
+    fn readings(values: &[(u32, u32, u32, i16)]) {
+        READINGS.with(|readings| *readings.borrow_mut() = values.to_vec());
+    }
+
+    #[test]
+    fn selected_stick_and_click_are_independent() {
+        for stick in [MouseStick::Left, MouseStick::Right] {
+            for click in [MouseClick::L3, MouseClick::R3] {
+                let mouse = GamepadMouse {
+                    enabled: true,
+                    stick,
+                    click,
+                };
+                readings(&[
+                    (ffi::ANALOG, stick.index(), 0, i16::MIN),
+                    (ffi::ANALOG, stick.index(), 1, 2000),
+                    (ffi::JOYPAD, 0, click.button(), 1),
+                ]);
+                let snapshot = poll(Some(controller), true, mouse, vec![]);
+                assert_eq!(snapshot.mouse_delta, [-8.0, 0.0]);
+                assert_eq!(snapshot.buttons, [true, false, false]);
+                readings(&[
+                    (ffi::ANALOG, 1 - stick.index(), 0, i16::MIN),
+                    (
+                        ffi::JOYPAD,
+                        0,
+                        if click == MouseClick::L3 { 15 } else { 14 },
+                        1,
+                    ),
+                ]);
+                let snapshot = poll(Some(controller), true, mouse, vec![]);
+                assert_eq!(snapshot.mouse_delta, [0.0, 0.0]);
+                assert_eq!(snapshot.buttons, [false; 3]);
+            }
+        }
+    }
+
+    #[test]
+    fn disabled_mouse_or_disconnected_pad_preserves_physical_mouse_and_keyboard() {
+        readings(&[
+            (ffi::ANALOG, 0, 0, i16::MIN),
+            (ffi::ANALOG, 1, 1, i16::MIN),
+            (ffi::JOYPAD, 0, 14, 1),
+            (ffi::JOYPAD, 0, 15, 1),
+            (ffi::JOYPAD, 0, 10, 1),
+            (ffi::JOYPAD, 0, 11, 1),
+            (ffi::JOYPAD, 0, 8, 1),
+            (ffi::KEYBOARD, 0, 97, 1),
+            (ffi::MOUSE, 0, 0, 3),
+            (ffi::MOUSE, 0, 1, -2),
+            (ffi::MOUSE, 0, 6, 1),
+            (ffi::MOUSE, 0, 4, 1),
+        ]);
+        for (joypad, enabled) in [(true, false), (false, true)] {
+            let snapshot = poll(
+                Some(controller),
+                joypad,
+                GamepadMouse {
+                    enabled,
+                    ..GamepadMouse::default()
+                },
+                vec![],
+            );
+            assert_eq!(snapshot.mouse_delta, [3.0, -2.0]);
+            assert_eq!(snapshot.buttons, [false, false, true]);
+            assert_eq!(snapshot.wheel, 1.0);
+            assert!(snapshot.keys[97]);
+            assert_eq!(snapshot.keys[32], joypad);
+        }
+    }
+
+    #[test]
+    fn changing_mouse_options_releases_held_click_without_repeating_or_losing_physical_hold() {
+        let on = GamepadMouse {
+            enabled: true,
+            ..GamepadMouse::default()
+        };
+        let off = GamepadMouse::default();
+        let l3 = GamepadMouse {
+            click: MouseClick::L3,
+            ..on
+        };
+        for changed in [off, l3] {
+            let mut input = Input::new(320, 240);
+            readings(&[(ffi::JOYPAD, 0, 15, 1)]);
+            let events = input.events(poll(Some(controller), true, on, vec![]), 320, 240);
+            assert!(events
+                .iter()
+                .any(|e| matches!(e, PlayerEvent::MouseDown { .. })));
+            let events = input.events(poll(Some(controller), true, on, vec![]), 320, 240);
+            assert_eq!(events.len(), 1); // Held button does not repeat.
+            readings(&[(ffi::JOYPAD, 0, 15, 1), (ffi::MOUSE, 0, 2, 1)]);
+            let events = input.events(poll(Some(controller), true, changed, vec![]), 320, 240);
+            assert_eq!(events.len(), 1); // Physical mouse still holds left button.
+            readings(&[(ffi::JOYPAD, 0, 15, 1)]);
+            let events = input.events(poll(Some(controller), true, changed, vec![]), 320, 240);
+            assert!(events
+                .iter()
+                .any(|e| matches!(e, PlayerEvent::MouseUp { .. })));
+        }
+    }
 
     #[test]
     fn space_supports_flash_button_keypress_without_duplicate_text() {
@@ -335,11 +466,19 @@ mod tests {
             i16::from(device == ffi::JOYPAD && id == 8)
         }
         let mut input = Input::new(320, 240);
-        input.events(poll(Some(pad_only), true, vec![]), 320, 240);
-        let events = input.events(poll(Some(keyboard_only), true, vec![]), 320, 240);
+        input.events(
+            poll(Some(pad_only), true, GamepadMouse::default(), vec![]),
+            320,
+            240,
+        );
+        let events = input.events(
+            poll(Some(keyboard_only), true, GamepadMouse::default(), vec![]),
+            320,
+            240,
+        );
         assert!(!events
             .iter()
             .any(|e| matches!(e, PlayerEvent::KeyUp { .. } | PlayerEvent::KeyDown { .. })));
-        assert!(!poll(Some(pad_only), false, vec![]).keys[32]);
+        assert!(!poll(Some(pad_only), false, GamepadMouse::default(), vec![]).keys[32]);
     }
 }

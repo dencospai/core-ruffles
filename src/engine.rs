@@ -116,6 +116,10 @@ impl Game {
         ffi::av_info(self.width, self.height)
     }
 
+    pub fn options(&self) -> Options {
+        self.options
+    }
+
     pub fn run(&mut self, snapshot: Snapshot, updated: Option<Options>) -> Result<Frame, String> {
         self.executor.run();
         let mut player = self.player.lock().map_err(|e| e.to_string())?;

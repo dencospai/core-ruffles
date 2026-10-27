@@ -117,7 +117,7 @@ def run(library):
         saves = C.create_string_buffer(temporary.encode())
         core.retro_init()
         try:
-            assert len(registered) == 6, registered
+            assert len(registered) == 9, registered
             assert core.retro_load_game(C.byref(GameInfo(str(path).encode(), None, 0, None)))
             tick()
             expected = (1280, 720)
@@ -150,7 +150,7 @@ def run(library):
             assert not errors, errors
         finally:
             core.retro_deinit()
-    print("PASS: 6 options; all resolutions, scale/quality modes; live geometry; retained frame across pause/reset/unload")
+    print("PASS: 9 options; all resolutions, scale/quality modes; live geometry; retained frame across pause/reset/unload")
 
 
 if __name__ == "__main__":

@@ -26,7 +26,55 @@ const DEFINITIONS: &[(&CStr, &CStr)] = &[
         c"ruffle_compatibility",
         c"Compatibility fixes (restart content); Auto|Off",
     ),
+    (c"ruffle_gamepad_mouse", c"Gamepad mouse; Off|On"),
+    (
+        c"ruffle_mouse_stick",
+        c"Gamepad mouse - movement stick; Left|Right",
+    ),
+    (
+        c"ruffle_mouse_click",
+        c"Gamepad mouse - left click; R3|L3",
+    ),
 ];
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum MouseStick {
+    #[default]
+    Left,
+    Right,
+}
+
+impl MouseStick {
+    pub fn index(self) -> u32 {
+        match self {
+            Self::Left => 0,
+            Self::Right => 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum MouseClick {
+    L3,
+    #[default]
+    R3,
+}
+
+impl MouseClick {
+    pub fn button(self) -> u32 {
+        match self {
+            Self::L3 => 14,
+            Self::R3 => 15,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GamepadMouse {
+    pub enabled: bool,
+    pub stick: MouseStick,
+    pub click: MouseClick,
+}
 
 pub fn register(environment: ffi::Environment) {
     let mut variables: Vec<_> = DEFINITIONS
@@ -60,6 +108,7 @@ pub struct Options {
     pub letterbox: Letterbox,
     pub quality: StageQuality,
     pub compatibility: bool,
+    pub gamepad_mouse: GamepadMouse,
 }
 
 impl Default for Options {
@@ -71,6 +120,7 @@ impl Default for Options {
             letterbox: Letterbox::On,
             quality: StageQuality::High,
             compatibility: true,
+            gamepad_mouse: GamepadMouse::default(),
         }
     }
 }
@@ -140,6 +190,21 @@ impl Options {
                 }
             }
             "ruffle_compatibility" => self.compatibility = value != "off",
+            "ruffle_gamepad_mouse" => self.gamepad_mouse.enabled = value == "on",
+            "ruffle_mouse_stick" => {
+                self.gamepad_mouse.stick = if value == "right" {
+                    MouseStick::Right
+                } else {
+                    MouseStick::Left
+                };
+            }
+            "ruffle_mouse_click" => {
+                self.gamepad_mouse.click = if value == "l3" {
+                    MouseClick::L3
+                } else {
+                    MouseClick::R3
+                };
+            }
             _ => (),
         }
     }
@@ -152,6 +217,26 @@ impl Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gamepad_mouse_defaults_and_selections() {
+        let mut options = Options::default();
+        assert!(!options.gamepad_mouse.enabled);
+        assert_eq!(options.gamepad_mouse.stick, MouseStick::Left);
+        assert_eq!(options.gamepad_mouse.click, MouseClick::R3);
+        options.set("ruffle_gamepad_mouse", "On");
+        options.set("ruffle_mouse_stick", "Right");
+        options.set("ruffle_mouse_click", "L3");
+        assert!(options.gamepad_mouse.enabled);
+        assert_eq!(options.gamepad_mouse.stick, MouseStick::Right);
+        assert_eq!(options.gamepad_mouse.click, MouseClick::L3);
+        options.set("ruffle_gamepad_mouse", "Off");
+        assert!(!options.gamepad_mouse.enabled);
+        // Missing or corrupt frontend values have the same fallback as defaults.
+        options.set("ruffle_mouse_stick", "invalid");
+        options.set("ruffle_mouse_click", "invalid");
+        assert_eq!(options.gamepad_mouse, GamepadMouse::default());
+    }
+
     #[test]
     fn native_portrait_and_explicit_canvas() {
         let mut options = Options::default();

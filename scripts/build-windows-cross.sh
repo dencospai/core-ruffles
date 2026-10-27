@@ -23,5 +23,5 @@ export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS='-C target-feature=+crt-sta
 cargo build --release --locked --target x86_64-pc-windows-msvc
 mkdir -p dist/windows-x64
 cp target/x86_64-pc-windows-msvc/release/ruffle_libretro.dll dist/windows-x64/
-cp ruffle_libretro.info README.md VALIDATION.md THIRD_PARTY.md LICENSE-MIT LICENSE-APACHE dist/windows-x64/
+cp ruffle_libretro.info README.md LICENSE-MIT LICENSE-APACHE dist/windows-x64/
 echo 'Core built: dist/windows-x64/ruffle_libretro.dll'

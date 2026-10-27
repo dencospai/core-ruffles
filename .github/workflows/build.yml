@@ -53,4 +53,5 @@ jobs:
       - run: cargo build --locked
       - run: python3 scripts/smoke_test.py target/debug/libruffle_libretro.so
       - run: python3 scripts/cursor_test.py target/debug/libruffle_libretro.so
+      - run: python3 scripts/gamepad_mouse_test.py target/debug/libruffle_libretro.so
 

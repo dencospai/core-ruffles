@@ -14,6 +14,6 @@ artifact_dir="${CARGO_TARGET_DIR:-$project_dir/target}/$target/release"
 mkdir -p dist/linux-x64
 # Use the usual libretro filename, without Cargo's lib prefix.
 cp "$artifact_dir/libruffle_libretro.so" dist/linux-x64/ruffle_libretro.so
-cp ruffle_libretro.info README.md VALIDATION.md THIRD_PARTY.md LICENSE-MIT LICENSE-APACHE dist/linux-x64/
+cp ruffle_libretro.info README.md LICENSE-MIT LICENSE-APACHE dist/linux-x64/
 cp tests/fixtures/smoke.swf tests/fixtures/cursor.swf dist/linux-x64/
 echo 'Core built: dist/linux-x64/ruffle_libretro.so'

@@ -1,0 +1,29 @@
+[package]
+name = "ruffle_libretro"
+version = "0.2.2"
+edition = "2021"
+publish = false
+description = "Experimental Ruffle-based libretro core for standalone Flash games"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ruffle_core = { git = "https://github.com/ruffle-rs/ruffle", rev = "2cf0fe76e4629befd870c75684b3cae71fa5b8ba", features = ["audio", "mp3", "aac", "nellymoser", "lzma", "default_font"] }
+ruffle_render = { git = "https://github.com/ruffle-rs/ruffle", rev = "2cf0fe76e4629befd870c75684b3cae71fa5b8ba" }
+ruffle_render_wgpu = { git = "https://github.com/ruffle-rs/ruffle", rev = "2cf0fe76e4629befd870c75684b3cae71fa5b8ba" }
+swf = { git = "https://github.com/ruffle-rs/ruffle", rev = "2cf0fe76e4629befd870c75684b3cae71fa5b8ba" }
+sha2 = "0.10"
+async-channel = "2"
+indexmap = "2"
+url = "2"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 16
+panic = "unwind"
+
